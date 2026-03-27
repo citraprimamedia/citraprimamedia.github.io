@@ -1,4 +1,4 @@
-const CACHE_NAME = 'absensi-v6';
+const CACHE_NAME = 'absensi-v7';
 const urlsToCache = [
   './',
   './index.html',
