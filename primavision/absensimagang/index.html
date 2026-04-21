@@ -133,6 +133,10 @@
                 <p class="text-xs font-medium text-gray-400">Rekapitulasi Absensi Prima Vision</p>
             </div>
             <div class="flex gap-2 relative z-10">
+                <button onclick="openPeriodeModal()" class="bg-indigo-500 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-indigo-600 transition active:scale-95">
+                    <i class="fa-solid fa-users-viewfinder"></i> Periode
+                </button>
+
                 <button onclick="openRekapModal('ADMIN')" class="bg-cyan-500 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-cyan-600 transition active:scale-95">
                     <i class="fa-solid fa-list-check"></i> Rekap
                 </button>
@@ -299,6 +303,48 @@
         </div>
     </div>
 
+    <div id="periodeModal" class="hidden fixed inset-0 z-[75] bg-black bg-opacity-50 flex items-end sm:items-center justify-center backdrop-blur-sm p-4 transition-all duration-300">
+        <div class="bg-white w-full max-w-md h-[80vh] rounded-t-[2rem] sm:rounded-[2rem] p-0 shadow-2xl flex flex-col overflow-hidden relative">
+            
+            <div class="p-6 pb-4 bg-white border-b border-gray-100 flex justify-between items-center flex-none">
+                <div>
+                    <h3 class="font-bold text-xl text-gray-800">Rekapitulasi Global</h3>
+                    <p class="text-xs text-gray-400">Total kehadiran semua peserta</p>
+                </div>
+                <button onclick="closePeriodeModal()" class="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-gray-100 transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="p-4 bg-gray-50 flex flex-col gap-3 flex-none border-b border-gray-100 shadow-sm z-10">
+                <div class="flex gap-2 items-center">
+                    <div class="flex-1">
+                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Mulai Tanggal</label>
+                        <input type="date" id="periodeStart" class="w-full p-2 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 outline-none focus:border-indigo-500 bg-white uppercase text-center">
+                    </div>
+                    <span class="mt-4 text-gray-300 font-bold">-</span>
+                    <div class="flex-1">
+                        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1">Sampai Tanggal</label>
+                        <input type="date" id="periodeEnd" class="w-full p-2 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 outline-none focus:border-indigo-500 bg-white uppercase text-center">
+                    </div>
+                </div>
+                
+                <div class="flex gap-2 mt-1">
+                    <button onclick="generatePeriodeReport()" class="flex-1 bg-indigo-500 text-white font-bold py-3 rounded-xl hover:bg-indigo-600 transition shadow-[0_5px_15px_rgba(99,102,241,0.3)] active:scale-95 text-sm flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-bolt"></i> Tampilkan
+                    </button>
+                    <button onclick="exportPeriodeToCSV()" id="btnExportPeriode" class="hidden flex-none bg-emerald-500 text-white font-bold px-4 py-3 rounded-xl hover:bg-emerald-600 transition shadow-[0_5px_15px_rgba(16,185,129,0.3)] active:scale-95 text-sm flex items-center justify-center gap-2 tooltip">
+                        <i class="fa-solid fa-file-csv"></i> Excel
+                    </button>
+                </div>
+            </div>
+
+            <div id="periodeContent" class="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
+                <div class="text-center text-gray-400 mt-10 text-xs">Pilih tanggal dan klik Tampilkan</div>
+            </div>
+        </div>
+    </div>
+
     <div id="loadingOverlay" class="hidden fixed inset-0 z-[80] bg-black bg-opacity-80 flex items-center justify-center flex-col backdrop-blur-md">
         <div class="relative w-20 h-20">
              <div class="absolute top-0 left-0 w-full h-full border-4 border-blue-200 rounded-full animate-ping opacity-20"></div>
@@ -322,6 +368,8 @@
         const WORK_START_MINUTE = 0;
         const WORK_END_HOUR = 17;     // Jam 17:00 Sore Pulang
         const WORK_END_MINUTE = 0;
+
+        let currentPeriodeRecapData = [];
 
         const internData = {
             "7371092004030008": { name: "Habiburrahman", role: "Intern NOC", campus: "Univ. Muslim Indonesia" },
@@ -835,6 +883,143 @@
                     console.log('ServiceWorker registration failed: ', err);
                 });
             });
+        }
+
+        // ================= LOGIC REKAP PERIODE GLOBAL =================
+        function openPeriodeModal() {
+            document.getElementById('periodeModal').classList.remove('hidden');
+            
+            // Set Default: Tanggal 1 bulan ini sampai Hari ini
+            const today = new Date();
+            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+            
+            const formatDate = (date) => {
+                const d = new Date(date);
+                let month = '' + (d.getMonth() + 1);
+                let day = '' + d.getDate();
+                if (month.length < 2) month = '0' + month;
+                if (day.length < 2) day = '0' + day;
+                return [d.getFullYear(), month, day].join('-');
+            };
+
+            document.getElementById('periodeStart').value = formatDate(firstDay);
+            document.getElementById('periodeEnd').value = formatDate(today);
+            
+            generatePeriodeReport();
+        }
+
+        function closePeriodeModal() {
+            document.getElementById('periodeModal').classList.add('hidden');
+        }
+
+        function generatePeriodeReport() {
+            const startVal = document.getElementById('periodeStart').value;
+            const endVal = document.getElementById('periodeEnd').value;
+            const container = document.getElementById('periodeContent');
+            
+            if(!startVal || !endVal) return alert("Pilih tanggal mulai dan sampai!");
+
+            container.innerHTML = '<div class="text-center py-8"><i class="fa-solid fa-spinner fa-spin text-indigo-500 text-2xl"></i><p class="text-xs text-gray-500 mt-2 font-medium">Menghitung Data...</p></div>';
+
+            const startDate = new Date(startVal); startDate.setHours(0,0,0,0);
+            const endDate = new Date(endVal); endDate.setHours(23,59,59,999);
+
+            // 1. Siapkan struktur data awal (Semua user dimasukkan agar yang alpha tetap muncul 0)
+            const recapData = {};
+            Object.values(internData).forEach(user => {
+                recapData[user.name] = { hadir: 0, telat: 0, izin: 0 };
+            });
+
+            // 2. Filter rawData berdasarkan rentang tanggal
+            const filtered = rawData.filter(item => {
+                const d = new Date(item.waktu);
+                return d >= startDate && d <= endDate;
+            });
+
+            // Urutkan dari yang terlama ke terbaru (agar jam masuk pertama yang ditangkap)
+            filtered.sort((a,b) => new Date(a.waktu) - new Date(b.waktu));
+
+            // 3. Kelompokkan per Tanggal per Nama (Untuk mencegah absen ganda dihitung 2x)
+            const dailyData = {}; 
+
+            filtered.forEach(item => {
+                const d = new Date(item.waktu);
+                const dateKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+                
+                if (!dailyData[dateKey]) dailyData[dateKey] = {};
+                if (!dailyData[dateKey][item.nama]) dailyData[dateKey][item.nama] = { in: null, status: '' };
+
+                // Tangkap Check In Pertama di hari itu
+                if (item.status === 'Check In' && !dailyData[dateKey][item.nama].in) {
+                    dailyData[dateKey][item.nama].in = d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
+                } 
+                // Jika hari itu Izin/Sakit
+                else if (item.status === 'Sakit' || item.status === 'Izin' || item.status === 'Cuti') {
+                    dailyData[dateKey][item.nama].status = item.status;
+                }
+            });
+
+            // 4. Hitung Total Poin ke masing-masing anak magang
+            for (const dateKey in dailyData) {
+                for (const nama in dailyData[dateKey]) {
+                    if (!recapData[nama]) continue; // Abaikan jika nama tidak ada di database
+
+                    const data = dailyData[dateKey][nama];
+                    if (data.status === 'Sakit' || data.status === 'Izin' || data.status === 'Cuti') {
+                        recapData[nama].izin++;
+                    } else if (data.in) {
+                        recapData[nama].hadir++;
+                        
+                        // Deteksi Telat
+                        const parts = data.in.includes('.') ? data.in.split('.') : data.in.split(':');
+                        const minMasuk = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+                        const startWorkMin = WORK_START_HOUR * 60 + WORK_START_MINUTE;
+                        
+                        if (minMasuk > startWorkMin) recapData[nama].telat++;
+                    }
+                }
+            }
+
+            // 5. Render Hasil ke Tampilan
+            let html = '';
+            
+            // Urutkan Ranking: Hadir terbanyak -> Telat Paling Sedikit
+            const sortedNames = Object.keys(recapData).sort((a, b) => {
+                if (recapData[b].hadir !== recapData[a].hadir) {
+                    return recapData[b].hadir - recapData[a].hadir; // Sort By Hadir Descending
+                }
+                return recapData[a].telat - recapData[b].telat; // Sort By Telat Ascending
+            });
+
+            sortedNames.forEach((nama, index) => {
+                const r = recapData[nama];
+                
+                // Beri Mahkota untuk Peringkat 1
+                let rankTrophy = "";
+                if (index === 0 && r.hadir > 0) rankTrophy = '<i class="fa-solid fa-crown text-yellow-400 absolute -top-2 -right-2 text-xl filter drop-shadow-md"></i>';
+
+                html += `
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center justify-between hover:shadow-md transition relative">
+                    ${rankTrophy}
+                    <div>
+                        <p class="font-extrabold text-gray-800 text-[15px]">${nama}</p>
+                        <div class="flex gap-4 mt-2 text-[10px] font-bold">
+                            <span class="text-green-600 bg-green-50 px-2 py-1 rounded-md"><i class="fa-solid fa-check"></i> Hadir: ${r.hadir}</span>
+                            <span class="text-red-500 bg-red-50 px-2 py-1 rounded-md"><i class="fa-solid fa-clock"></i> Telat: ${r.telat}</span>
+                            <span class="text-yellow-600 bg-yellow-50 px-2 py-1 rounded-md"><i class="fa-solid fa-envelope"></i> Izin: ${r.izin}</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-center justify-center pl-3 border-l border-gray-100">
+                        <div class="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-xl border-2 border-indigo-100">
+                            ${r.hadir}
+                        </div>
+                        <span class="text-[8px] text-indigo-400 font-bold uppercase mt-1 tracking-wider">Total</span>
+                    </div>
+                </div>`;
+            });
+
+            if (sortedNames.length === 0) html = '<div class="text-center text-gray-400 mt-10 text-xs">Tidak ada data.</div>';
+            container.innerHTML = html;
         }
     </script>
 </body>
